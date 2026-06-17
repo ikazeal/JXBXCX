@@ -321,7 +321,7 @@ function enrichMatch(db, match) {
     ...getTeamKeyPlayers(db, match.home),
     ...getTeamKeyPlayers(db, match.away)
   ];
-  const dedupedPlayers = Array.from(new Map(liveKeyPlayers.map((player) => [player.id, player])).values())
+  const dedupedPlayers = Array.from(new Map(liveKeyPlayers.map((player) => [`${player.teamId}:${player.name || player.playerCnName || player.englishName || player.id}`, player])).values())
     .filter((player) => player && player.image)
     .sort((a, b) => Number(b.impact || 0) - Number(a.impact || 0));
   const prediction = buildAiPrediction(db, match, homeTeam, awayTeam, dedupedPlayers);
