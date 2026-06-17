@@ -389,12 +389,66 @@ function upsertUser(db, session, profile = {}) {
 
 function publicUser(user) {
   if (!user) return null;
+  const inviteCode = user.userId;
   return {
     userId: user.userId,
+    inviteCode,
     nickname: user.nickname,
     avatarUrl: user.avatarUrl,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt
+  };
+}
+
+function ensureInviteStore(db) {
+  if (!db.invites) db.invites = [];
+  if (!db.settings) db.settings = {};
+  if (!db.settings.points) db.settings.points = { resultHit: 50, scoreHit: 100 };
+  if (!db.settings.points.inviteBonus) db.settings.points.inviteBonus = 20;
+}
+
+function getInviteStats(db, userId) {
+  ensureInviteStore(db);
+  const sent = db.invites.filter((item) => item.inviterId === userId && item.status === "valid");
+  const received = db.invites.find((item) => item.invitedUserId === userId && item.status === "valid") || null;
+  return {
+    inviteBonus: db.settings.points.inviteBonus,
+    validInviteCount: sent.length,
+    invitePoints: sent.reduce((sum, item) => sum + Number(item.points || 0), 0),
+    invitedBy: received ? received.inviterId : ""
+  };
+}
+
+function processInvite(db, inviterId, invitedUserId) {
+  ensureInviteStore(db);
+  if (!inviterId || !invitedUserId) return { applied: false, reason: "empty" };
+  if (inviterId === invitedUserId) return { applied: false, reason: "self" };
+  const inviter = (db.users || []).find((item) => item.userId === inviterId);
+  const invited = (db.users || []).find((item) => item.userId === invitedUserId);
+  if (!inviter || !invited) return { applied: false, reason: "user-not-found" };
+  const alreadyInvited = db.invites.find((item) => item.invitedUserId === invitedUserId && item.status === "valid");
+  if (alreadyInvited) return { applied: false, reason: "already-invited" };
+  const duplicatePair = db.invites.find((item) => item.inviterId === inviterId && item.invitedUserId === invitedUserId);
+  if (duplicatePair) return { applied: false, reason: "duplicate" };
+  const now = new Date().toISOString();
+  const invite = {
+    id: `inv_${Date.now()}_${hashText(`${inviterId}_${invitedUserId}`)}`,
+    inviterId,
+    invitedUserId,
+    points: db.settings.points.inviteBonus,
+    status: "valid",
+    createdAt: now
+  };
+  db.invites.push(invite);
+  return { applied: true, invite };
+}
+
+function publicUserWithStats(db, user) {
+  const base = publicUser(user);
+  if (!base) return null;
+  return {
+    ...base,
+    inviteStats: getInviteStats(db, user.userId)
   };
 }
 
@@ -403,27 +457,56 @@ function readUserIdFromReq(req, query) {
 }
 
 function buildLeaderboard(db) {
+  ensureInviteStore(db);
   const byUser = new Map();
+  (db.users || []).forEach((user) => {
+    byUser.set(user.userId, {
+      userId: user.userId,
+      name: getUserDisplayName(user),
+      avatarUrl: user.avatarUrl || "",
+      points: 0,
+      predictionPoints: 0,
+      invitePoints: getInviteStats(db, user.userId).invitePoints,
+      inviteCount: getInviteStats(db, user.userId).validInviteCount,
+      settled: 0,
+      hits: 0
+    });
+  });
   db.predictions.map((item) => settlePrediction(db, item)).forEach((item) => {
+    const user = (db.users || []).find((entry) => entry.userId === item.userId);
     const current = byUser.get(item.userId) || {
       userId: item.userId,
-      name: item.nickname || item.userId,
+      name: item.nickname || getUserDisplayName(user),
+      avatarUrl: user?.avatarUrl || "",
       points: 0,
+      predictionPoints: 0,
+      invitePoints: getInviteStats(db, item.userId).invitePoints,
+      inviteCount: getInviteStats(db, item.userId).validInviteCount,
       settled: 0,
       hits: 0
     };
-    current.points += item.points || 0;
+    current.predictionPoints += item.points || 0;
     if (item.status === "settled") current.settled += 1;
     if (item.resultHit) current.hits += 1;
     byUser.set(item.userId, current);
   });
 
   return Array.from(byUser.values())
-    .sort((a, b) => b.points - a.points)
+    .map((item) => ({
+      ...item,
+      points: (item.predictionPoints || 0) + (item.invitePoints || 0)
+    }))
+    .filter((item) => item.points > 0 || item.settled > 0 || item.inviteCount > 0)
+    .sort((a, b) => b.points - a.points || b.hits - a.hits || String(a.name).localeCompare(String(b.name)))
     .map((item, index) => ({
       rank: index + 1,
+      userId: item.userId,
       name: item.name,
+      avatarUrl: item.avatarUrl,
       points: item.points,
+      predictionPoints: item.predictionPoints,
+      invitePoints: item.invitePoints,
+      inviteCount: item.inviteCount,
       hitRate: item.settled ? `${Math.round((item.hits / item.settled) * 100)}%` : "0%",
       hits: item.hits,
       settled: item.settled
@@ -957,8 +1040,10 @@ async function handleApi(req, res, pathname, query) {
     const body = await readBody(req);
     const session = await exchangeWechatCode(body.code || "");
     const user = upsertUser(db, session, body.profile || {});
+    const inviteCode = String(body.inviteCode || body.inviterId || "").trim();
+    const inviteResult = inviteCode ? processInvite(db, inviteCode, user.userId) : { applied: false, reason: "empty" };
     writeDb(db);
-    sendJson(res, { user: publicUser(user), devMode: Boolean(session.isDev) });
+    sendJson(res, { user: publicUserWithStats(db, user), inviteResult, devMode: Boolean(session.isDev) });
     return;
   }
 
@@ -978,13 +1063,13 @@ async function handleApi(req, res, pathname, query) {
       updatedAt: new Date().toISOString()
     };
     writeDb(db);
-    sendJson(res, { user: publicUser(db.users[index]) });
+    sendJson(res, { user: publicUserWithStats(db, db.users[index]) });
     return;
   }
 
   if (req.method === "GET" && pathname === "/api/admin/users") {
     const users = (db.users || []).map((user) => ({
-      ...publicUser(user),
+      ...publicUserWithStats(db, user),
       predictionCount: (db.predictions || []).filter((item) => item.userId === user.userId).length,
       totalPoints: (db.predictions || [])
         .filter((item) => item.userId === user.userId)
@@ -1115,7 +1200,23 @@ async function handleApi(req, res, pathname, query) {
   }
 
   if (req.method === "GET" && pathname === "/api/leaderboard") {
-    sendJson(res, { leaderboard: buildLeaderboard(db) });
+    const userId = readUserIdFromReq(req, query);
+    const leaderboard = buildLeaderboard(db).map((item) => ({
+      ...item,
+      isMe: Boolean(userId && item.userId === userId)
+    }));
+    sendJson(res, { leaderboard });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/invites/me") {
+    const userId = readUserIdFromReq(req, query);
+    const user = (db.users || []).find((item) => item.userId === userId);
+    if (!user) {
+      sendJson(res, { error: "用户不存在，请先登录" }, 404);
+      return;
+    }
+    sendJson(res, { inviteStats: getInviteStats(db, userId), inviteCode: userId });
     return;
   }
 
