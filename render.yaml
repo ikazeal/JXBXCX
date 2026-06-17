@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: golden-boot-cup-admin-api
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WECHAT_APPID
+        sync: false
+      - key: WECHAT_SECRET
+        sync: false

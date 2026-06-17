@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>金靴杯后台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">Golden Boot Cup Admin</div>
+          <h1>金靴杯数据后台</h1>
+          <p>维护赛程、比分、AI预测、用户预测积分和排行榜。</p>
+        </div>
+        <div class="top-actions">
+          <button id="syncGoldenBtn">同步金靴杯官网赛程</button>
+          <button id="syncCctvBtn">同步 CCTV 赛程</button>
+          <button id="syncBaiduBtn">同步百度赛程</button>
+          <button id="refreshBtn">刷新数据</button>
+        </div>
+      </header>
+
+      <section id="syncMessage" class="sync-message"></section>
+
+      <section class="grid stats">
+        <article>
+          <span>比赛总数</span>
+          <strong id="matchCount">0</strong>
+        </article>
+        <article>
+          <span>进行中</span>
+          <strong id="liveCount">0</strong>
+        </article>
+        <article>
+          <span>已完场</span>
+          <strong id="doneCount">0</strong>
+        </article>
+        <article>
+          <span>排行榜人数</span>
+          <strong id="rankCount">0</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>比赛管理</h2>
+          <p>修改状态和比分后，小程序接口会返回最新数据。</p>
+        </div>
+        <div id="matches" class="match-list"></div>
+      </section>
+
+      <section class="two-col">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>测试提交预测</h2>
+            <p>用于验证用户观赛判断、赛果更新和积分结果。</p>
+          </div>
+          <form id="predictionForm" class="form">
+            <label>
+              比赛
+              <select id="matchSelect"></select>
+            </label>
+            <label>
+              用户昵称
+              <input id="nicknameInput" value="我的预测" />
+            </label>
+            <label>
+              胜平负
+              <select id="resultSelect">
+                <option value="home">主胜</option>
+                <option value="draw">平局</option>
+                <option value="away">客胜</option>
+              </select>
+            </label>
+            <label>
+              比分预测
+              <input id="scoreInput" value="2-1" />
+            </label>
+            <button type="submit">提交预测</button>
+          </form>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>预测排行榜</h2>
+            <p>按已更新积分排序。</p>
+          </div>
+          <div id="leaderboard" class="rank-list"></div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>我的预测结果</h2>
+          <p>展示当前测试用户的预测、命中情况和得分。</p>
+        </div>
+        <div id="predictions" class="prediction-list"></div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
