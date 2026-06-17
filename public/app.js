@@ -91,16 +91,17 @@ function renderMatchSelect() {
 }
 
 function renderLeaderboard(items) {
-  $("#leaderboard").innerHTML = items.map((item) => `
-    <div class="rank-row">
+  const list = items || [];
+  $("#leaderboard").innerHTML = list.map((item) => `
+    <div class="rank-row ${item.rank <= 3 ? 'top-rank' : ''}">
       <div class="rank-no">${item.rank}</div>
       <div class="rank-main">
         <strong>${item.name}</strong>
-        <span>命中率 ${item.hitRate} · 已更新 ${item.settled}</span>
+        <span>总积分 ${item.points} · 赛果积分 ${item.predictionPoints || 0} · 邀请积分 ${item.invitePoints || 0} · 命中率 ${item.hitRate}</span>
       </div>
       <div class="rank-score">${item.points}</div>
     </div>
-  `).join("") || "<p>暂无排行榜数据</p>";
+  `).join("") || "<p class=\"empty-text\">暂无真实排行榜数据。用户完成观赛判断或邀请好友后会自动上榜。</p>";
 }
 
 function renderPredictions(items) {
@@ -120,55 +121,22 @@ function renderPredictions(items) {
 }
 
 $("#refreshBtn").addEventListener("click", loadAll);
+$("#refreshRankBtn").addEventListener("click", loadAll);
 
 $("#syncGoldenBtn").addEventListener("click", async () => {
   const button = $("#syncGoldenBtn");
   button.disabled = true;
   button.textContent = "同步中...";
-  showSyncMessage("正在从金靴杯官网同步赛程和赛果，请稍等。");
+  showSyncMessage("正在同步赛程和赛果，请稍等。");
   try {
     const result = await api("/api/admin/sync/golden", { method: "POST" });
-    showSyncMessage(`金靴杯官网同步完成：抓取 ${result.fetched} 场，新增 ${result.created} 场，更新 ${result.updated} 场。`);
+    showSyncMessage(`赛程同步完成：抓取 ${result.fetched} 场，新增 ${result.created} 场，更新 ${result.updated} 场。`);
     await loadAll();
   } catch (error) {
-    showSyncMessage(`${error.message} 如果仍然失败，请把官网赛程实际使用的 API 地址发给我。`, true);
+    showSyncMessage(`${error.message} 请稍后重试，或检查金靴杯官网赛程接口。`, true);
   } finally {
     button.disabled = false;
-    button.textContent = "同步金靴杯官网赛程";
-  }
-});
-
-$("#syncCctvBtn").addEventListener("click", async () => {
-  const button = $("#syncCctvBtn");
-  button.disabled = true;
-  button.textContent = "同步中...";
-  showSyncMessage("正在从 CCTV 同步赛程和赛果，请稍等。");
-  try {
-    const result = await api("/api/admin/sync/cctv", { method: "POST" });
-    showSyncMessage(`CCTV 同步完成：抓取 ${result.fetched} 场，新增 ${result.created} 场，更新 ${result.updated} 场。`);
-    await loadAll();
-  } catch (error) {
-    showSyncMessage(`${error.message} 可先使用后台手动维护比分，或稍后调整同步规则。`, true);
-  } finally {
-    button.disabled = false;
-    button.textContent = "同步 CCTV 赛程";
-  }
-});
-
-$("#syncBaiduBtn").addEventListener("click", async () => {
-  const button = $("#syncBaiduBtn");
-  button.disabled = true;
-  button.textContent = "同步中...";
-  showSyncMessage("正在从百度体育同步赛程和赛果，请稍等。");
-  try {
-    const result = await api("/api/admin/sync/baidu", { method: "POST" });
-    showSyncMessage(`同步完成：抓取 ${result.fetched} 场，新增 ${result.created} 场，更新 ${result.updated} 场。`);
-    await loadAll();
-  } catch (error) {
-    showSyncMessage(`${error.message} 可先使用后台手动维护比分，或稍后调整同步规则。`, true);
-  } finally {
-    button.disabled = false;
-    button.textContent = "同步百度赛程";
+    button.textContent = "同步赛程";
   }
 });
 
@@ -178,7 +146,7 @@ $("#predictionForm").addEventListener("submit", async (event) => {
     method: "POST",
     body: JSON.stringify({
       userId: "demo-user",
-      nickname: $("#nicknameInput").value,
+      nickname: $("#nicknameInput").value || "后台测试用户",
       matchId: $("#matchSelect").value,
       result: $("#resultSelect").value,
       score: $("#scoreInput").value

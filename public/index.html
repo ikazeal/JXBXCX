@@ -12,13 +12,11 @@
         <div>
           <div class="eyebrow">Golden Boot Cup Admin</div>
           <h1>金靴杯数据后台</h1>
-          <p>维护赛程、比分、AI预测、用户预测积分和排行榜。</p>
+          <p>管理赛程、赛果、用户观赛判断、积分和真实排行榜。</p>
         </div>
         <div class="top-actions">
-          <button id="syncGoldenBtn">同步金靴杯官网赛程</button>
-          <button id="syncCctvBtn">同步 CCTV 赛程</button>
-          <button id="syncBaiduBtn">同步百度赛程</button>
-          <button id="refreshBtn">刷新数据</button>
+          <button id="syncGoldenBtn">同步赛程</button>
+          <button id="refreshBtn" class="secondary">刷新数据</button>
         </div>
       </header>
 
@@ -43,19 +41,24 @@
         </article>
       </section>
 
-      <section class="panel">
+      <section class="panel priority-panel">
         <div class="panel-head">
-          <h2>比赛管理</h2>
-          <p>修改状态和比分后，小程序接口会返回最新数据。</p>
+          <div>
+            <h2>预测排行榜</h2>
+            <p>真实用户榜单：赛果积分 + 有效邀请积分。用户提交观赛判断并产生积分后会自动上榜。</p>
+          </div>
+          <button id="refreshRankBtn" class="secondary small-btn">刷新榜单</button>
         </div>
-        <div id="matches" class="match-list"></div>
+        <div id="leaderboard" class="rank-list featured-rank-list"></div>
       </section>
 
-      <section class="two-col">
+      <section class="two-col top-section">
         <article class="panel">
           <div class="panel-head">
-            <h2>测试提交预测</h2>
-            <p>用于验证用户观赛判断、赛果更新和积分结果。</p>
+            <div>
+              <h2>测试提交观赛判断</h2>
+              <p>用于后台验证积分、赛果更新和排行榜结果。</p>
+            </div>
           </div>
           <form id="predictionForm" class="form">
             <label>
@@ -75,28 +78,32 @@
               </select>
             </label>
             <label>
-              比分预测
+              比分参考
               <input id="scoreInput" value="2-1" />
             </label>
-            <button type="submit">提交预测</button>
+            <button type="submit">提交观赛判断</button>
           </form>
         </article>
 
         <article class="panel">
           <div class="panel-head">
-            <h2>预测排行榜</h2>
-            <p>按已更新积分排序。</p>
+            <div>
+              <h2>我的测试记录</h2>
+              <p>展示当前测试用户的提交记录、命中情况和得分。</p>
+            </div>
           </div>
-          <div id="leaderboard" class="rank-list"></div>
+          <div id="predictions" class="prediction-list"></div>
         </article>
       </section>
 
       <section class="panel">
         <div class="panel-head">
-          <h2>我的预测结果</h2>
-          <p>展示当前测试用户的预测、命中情况和得分。</p>
+          <div>
+            <h2>比赛管理</h2>
+            <p>修改状态和比分后，小程序接口会返回最新数据；点击“同步赛程”会从金靴杯官网刷新。</p>
+          </div>
         </div>
-        <div id="predictions" class="prediction-list"></div>
+        <div id="matches" class="match-list"></div>
       </section>
     </main>
 

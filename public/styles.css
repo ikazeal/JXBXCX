@@ -331,3 +331,46 @@ p {
     grid-template-columns: 1fr;
   }
 }
+
+.priority-panel {
+  border-color: rgba(245, 195, 95, 0.32);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(245, 195, 95, 0.16), transparent 360px),
+    rgba(10, 24, 40, 0.92);
+}
+
+.top-section {
+  margin-top: 0;
+}
+
+.small-btn {
+  padding: 9px 13px;
+  font-size: 13px;
+}
+
+.featured-rank-list {
+  grid-template-columns: 1fr;
+}
+
+.rank-row.top-rank {
+  border-color: rgba(245, 195, 95, 0.28);
+  background: linear-gradient(135deg, rgba(245, 195, 95, 0.12), rgba(10, 24, 40, 0.88));
+}
+
+.rank-row.top-rank .rank-no {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #07111d;
+  background: linear-gradient(135deg, #ffe08a, #dc9f35);
+}
+
+.empty-text {
+  padding: 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  text-align: center;
+}
