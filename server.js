@@ -1031,8 +1031,20 @@ function normalizeGoldenBootApiMatch(match) {
   };
 }
 
+async function fetchWithTimeout(resource, options = {}) {
+  const timeoutMs = Number(options.timeoutMs || 8000);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(resource, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchGoldenBootApiSchedule() {
-  const response = await fetch(GOLDEN_BOOT_SCHEDULE_API, {
+  const response = await fetchWithTimeout(GOLDEN_BOOT_SCHEDULE_API, {
+    timeoutMs: 8000,
     headers: {
       "User-Agent": "Mozilla/5.0 GoldenBootCupBot/1.0",
       "Accept": "application/json"
@@ -1084,8 +1096,8 @@ function upsertSyncedMatches(db, syncedMatches) {
       }
     };
     baseMatch.prediction = buildAiPrediction(db, baseMatch, home, away, [
-      ...getTeamLivePlayers(db, home.id),
-      ...getTeamLivePlayers(db, away.id)
+      ...getTeamKeyPlayers(db, home.id),
+      ...getTeamKeyPlayers(db, away.id)
     ]);
     if (existingIndex >= 0) {
       db.matches[existingIndex] = baseMatch;
