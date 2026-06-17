@@ -162,13 +162,25 @@ function flagClassForTeam(name) {
 }
 
 function isLivePlayer(player) {
-  return Boolean(player && (player.launchStatus === "Live" || player.status === "Live" || player.tokenAddress));
+  return Boolean(player && player.id && player.teamId);
 }
 
-function getTeamLivePlayers(db, teamId) {
+function getTeamKeyPlayers(db, teamId) {
   return (db.players || [])
-    .filter((player) => player.teamId === teamId && isLivePlayer(player))
-    .sort((a, b) => Number(b.impact || 0) - Number(a.impact || 0));
+    .filter((player) => player.teamId === teamId && player.image)
+    .sort((a, b) => Number(b.impact || 0) - Number(a.impact || 0))
+    .slice(0, 3);
+}
+
+function buildPlayerAiIntro(db, player, match) {
+  const team = getTeam(db, player.teamId);
+  const name = player.name || player.playerCnName || player.englishName || "该球员";
+  const teamName = team?.name || "该队";
+  const position = player.position || "关键位置";
+  const impact = Number(player.impact || 0);
+  const strengths = Array.isArray(player.strengths) && player.strengths.length ? player.strengths.slice(0, 2).join("、") : "关键回合处理";
+  const stage = match?.stage || "本场比赛";
+  return `${name}是${teamName}${position}位置的重要观察点。AI模型结合${stage}赛程、球队攻防评分和球员影响力，认为他在${strengths}方面可能改变比赛节奏；当前影响力评分 ${impact}，适合作为本场重点关注球员。`;
 }
 
 function clamp(value, min, max) {
@@ -185,6 +197,61 @@ function normalizeProbabilityParts(homeRaw, drawRaw, awayRaw) {
     draw = 100 - homeWin;
   }
   return { homeWin, draw, awayWin };
+}
+
+function buildTeamModelScore(db, team) {
+  const players = (db.players || []).filter((player) => player.teamId === team.id);
+  const topImpact = players
+    .slice()
+    .sort((a, b) => Number(b.impact || 0) - Number(a.impact || 0))
+    .slice(0, 3)
+    .reduce((sum, player) => sum + Number(player.impact || 0), 0);
+  const attack = Number(team.attack || 70);
+  const defense = Number(team.defense || 70);
+  const qualify = Number(team.qualifyRate || 0);
+  const rankBonus = team.rank ? clamp(18 - Number(team.rank || 18), 0, 18) : 4;
+  const score = Math.round(attack * 0.34 + defense * 0.28 + qualify * 0.2 + topImpact * 0.1 + rankBonus * 0.08);
+  return clamp(score, 1, 99);
+}
+
+function buildTeamRankings(db) {
+  return (db.teams || [])
+    .filter((team) => team && team.name && !isPlaceholderTeamName(team.name))
+    .map((team) => {
+      const score = buildTeamModelScore(db, team);
+      const players = (db.players || [])
+        .filter((player) => player.teamId === team.id)
+        .sort((a, b) => Number(b.impact || 0) - Number(a.impact || 0));
+      return {
+        id: team.id,
+        name: team.name,
+        flagClass: team.flagClass,
+        group: team.group,
+        rank: team.rank,
+        attack: team.attack,
+        defense: team.defense,
+        qualifyRate: team.qualifyRate,
+        score,
+        corePlayer: players[0] ? players[0].name : "暂无核心球员",
+        reason: `攻防 ${team.attack || 0}/${team.defense || 0}，晋级概率 ${team.qualifyRate || 0}%${players[0] ? `，核心观察 ${players[0].name}` : ""}`
+      };
+    })
+    .sort((a, b) => b.score - a.score || Number(a.rank || 999) - Number(b.rank || 999))
+    .map((team, index) => ({ ...team, rankNo: index + 1 }));
+}
+
+function buildChampionRankings(db) {
+  return buildTeamRankings(db)
+    .slice(0, 10)
+    .map((team, index) => {
+      const championIndex = clamp(Math.round(team.score * 0.78 + Number(team.qualifyRate || 0) * 0.22), 1, 99);
+      return {
+        ...team,
+        rankNo: index + 1,
+        championIndex,
+        title: index === 0 ? "头号热门" : index < 3 ? "争冠热门" : index < 6 ? "黑马观察" : "潜力队伍"
+      };
+    });
 }
 
 function buildAiPrediction(db, match, homeTeam, awayTeam, keyPlayers) {
@@ -242,8 +309,8 @@ function enrichMatch(db, match) {
   const existingKeyPlayerIds = ((match.prediction && match.prediction.keyPlayers) || []);
   const liveKeyPlayers = [
     ...existingKeyPlayerIds.map((id) => getPlayer(db, id)).filter(Boolean),
-    ...getTeamLivePlayers(db, match.home),
-    ...getTeamLivePlayers(db, match.away)
+    ...getTeamKeyPlayers(db, match.home),
+    ...getTeamKeyPlayers(db, match.away)
   ];
   const dedupedPlayers = Array.from(new Map(liveKeyPlayers.map((player) => [player.id, player])).values())
     .filter((player) => player && player.image)
@@ -252,7 +319,7 @@ function enrichMatch(db, match) {
   const keyPlayers = dedupedPlayers.map((player) => ({
     ...player,
     team: getTeam(db, player.teamId),
-    predictionText: `${player.name || player.playerCnName || player.englishName}是${getTeam(db, player.teamId)?.name || "该队"}重点球员，本场影响力 ${player.impact || 0}。${player.summary || "重点关注其在关键回合中的表现。"}`
+    predictionText: buildPlayerAiIntro(db, player, match)
   }));
   return {
     ...match,
@@ -454,6 +521,61 @@ function publicUserWithStats(db, user) {
 
 function readUserIdFromReq(req, query) {
   return query.userId || req.headers["x-gbc-user-id"] || "demo-user";
+}
+
+function buildGroupStandings(db) {
+  const groupMap = new Map();
+  const displayable = (db.matches || []).filter((match) => isDisplayableMatch(db, match));
+  displayable.forEach((match) => {
+    const home = getTeam(db, match.home);
+    const away = getTeam(db, match.away);
+    const group = match.stage || home?.group || away?.group || "世界杯";
+    if (!groupMap.has(group)) groupMap.set(group, new Map());
+    const rows = groupMap.get(group);
+    [home, away].filter(Boolean).forEach((team) => {
+      if (!rows.has(team.id)) {
+        rows.set(team.id, {
+          teamId: team.id,
+          team,
+          played: 0,
+          win: 0,
+          draw: 0,
+          lose: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          goalDiff: 0,
+          points: 0
+        });
+      }
+    });
+    const parsed = parseScore(match.score);
+    if (match.status !== "已完场" || !parsed || !home || !away) return;
+    const homeRow = rows.get(home.id);
+    const awayRow = rows.get(away.id);
+    homeRow.played += 1;
+    awayRow.played += 1;
+    homeRow.goalsFor += parsed.home;
+    homeRow.goalsAgainst += parsed.away;
+    awayRow.goalsFor += parsed.away;
+    awayRow.goalsAgainst += parsed.home;
+    if (parsed.home > parsed.away) {
+      homeRow.win += 1; homeRow.points += 3;
+      awayRow.lose += 1;
+    } else if (parsed.home < parsed.away) {
+      awayRow.win += 1; awayRow.points += 3;
+      homeRow.lose += 1;
+    } else {
+      homeRow.draw += 1; awayRow.draw += 1;
+      homeRow.points += 1; awayRow.points += 1;
+    }
+    homeRow.goalDiff = homeRow.goalsFor - homeRow.goalsAgainst;
+    awayRow.goalDiff = awayRow.goalsFor - awayRow.goalsAgainst;
+  });
+  return Array.from(groupMap.entries()).map(([group, rows]) => ({
+    group,
+    rows: Array.from(rows.values())
+      .sort((a, b) => b.points - a.points || b.goalDiff - a.goalDiff || b.goalsFor - a.goalsFor || String(a.team.name).localeCompare(String(b.team.name)))
+  })).filter((group) => group.rows.length);
 }
 
 function buildLeaderboard(db) {
@@ -1111,7 +1233,18 @@ async function handleApi(req, res, pathname, query) {
   }
 
   if (req.method === "GET" && pathname === "/api/teams") {
-    sendJson(res, { teams: db.teams });
+    try {
+      await syncGoldenBootScheduleIntoDb(db);
+    } catch (error) {
+      db.settings.lastGoldenScheduleSyncError = error.message || "自动同步赛程失败";
+      writeDb(db);
+    }
+    sendJson(res, {
+      teams: db.teams,
+      standings: buildGroupStandings(db),
+      championRankings: buildChampionRankings(db),
+      teamPowerRankings: buildTeamRankings(db)
+    });
     return;
   }
 
@@ -1139,8 +1272,15 @@ async function handleApi(req, res, pathname, query) {
       .sort((a, b) => Number(b.impact || 0) - Number(a.impact || 0))
       .slice(0, 8)
       .map((player) => ({ ...player, team: getTeam(db, player.teamId) }));
+    const championRankings = buildChampionRankings(db);
+    const teamPowerRankings = buildTeamRankings(db).slice(0, 12);
     sendJson(res, {
       fetchedAt: new Date().toISOString(),
+      model: {
+        name: "GBC Football Intelligence Model",
+        version: "v2.0",
+        factors: ["当日赛程", "球队攻防", "晋级概率", "关键球员影响力", "主客场基准"]
+      },
       daily: headline ? {
         title: `最值得关注：${headline.homeTeam.name} vs ${headline.awayTeam.name}`,
         text: headline.prediction.text,
@@ -1151,7 +1291,9 @@ async function handleApi(req, res, pathname, query) {
         tags: ["实时赛程", "AI预测", "关键球员"]
       },
       matches: focusMatches,
-      topPlayers
+      topPlayers,
+      championRankings,
+      teamPowerRankings
     });
     return;
   }
