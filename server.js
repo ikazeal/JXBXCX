@@ -215,9 +215,9 @@ function buildAiPrediction(db, match, homeTeam, awayTeam, keyPlayers) {
   const upset = Math.abs(probs.homeWin - probs.awayWin) <= 8 ? "高波动" : Math.abs(probs.homeWin - probs.awayWin) <= 16 ? "中等波动" : "低波动";
   const goals = homeGoals + awayGoals >= 3 ? "进球数偏高" : homeGoals + awayGoals <= 1 ? "小比分倾向" : "进球数中性";
   const keyText = featured
-    ? `本场关键球员关注：${featured}。${homeTeam?.name || "主队"}${homeNames.length ? `有${homeNames.join("、")}参与进攻/防守核心` : "暂无已上线球员币核心"}；${awayTeam?.name || "客队"}${awayNames.length ? `有${awayNames.join("、")}提供关键变量` : "暂无已上线球员币核心"}。`
-    : "双方暂未匹配到已上线球员币，预测主要依据球队攻防评分、赛程阶段与实时赛果状态。";
-  const text = `${homeTeam?.name || "主队"} vs ${awayTeam?.name || "客队"}：模型倾向${favorite}方向。${keyText} 综合攻防评分、已上线球员影响力和主客场基准，当前胜率为主胜 ${probs.homeWin}% / 平局 ${probs.draw}% / 客胜 ${probs.awayWin}%。`;
+    ? `本场关键球员关注：${featured}。${homeTeam?.name || "主队"}${homeNames.length ? `有${homeNames.join("、")}参与进攻/防守核心` : "暂无明确核心球员"}；${awayTeam?.name || "客队"}${awayNames.length ? `有${awayNames.join("、")}提供关键变量` : "暂无明确核心球员"}。`
+    : "双方暂未匹配到重点球员，预测主要依据球队攻防评分、赛程阶段与实时赛果状态。";
+  const text = `${homeTeam?.name || "主队"} vs ${awayTeam?.name || "客队"}：模型倾向${favorite}方向。${keyText} 综合攻防评分、关键球员影响力和主客场基准，当前胜率为主胜 ${probs.homeWin}% / 平局 ${probs.draw}% / 客胜 ${probs.awayWin}%。`;
   return {
     ...existing,
     ...probs,
@@ -252,7 +252,7 @@ function enrichMatch(db, match) {
   const keyPlayers = dedupedPlayers.map((player) => ({
     ...player,
     team: getTeam(db, player.teamId),
-    predictionText: `${player.name || player.playerCnName || player.englishName}是${getTeam(db, player.teamId)?.name || "该队"}已上线/重点球员，本场影响力 ${player.impact || 0}。${player.summary || "重点关注其在关键回合中的表现。"}`
+    predictionText: `${player.name || player.playerCnName || player.englishName}是${getTeam(db, player.teamId)?.name || "该队"}重点球员，本场影响力 ${player.impact || 0}。${player.summary || "重点关注其在关键回合中的表现。"}`
   }));
   return {
     ...match,
@@ -1147,7 +1147,7 @@ async function handleApi(req, res, pathname, query) {
         tags: [headline.prediction.upset, headline.prediction.goals, headline.aiTendency].filter(Boolean)
       } : {
         title: "等待实时赛程",
-        text: "后台会自动同步赛程、赛果，并结合已上线球员生成AI预测。",
+        text: "后台会自动同步赛程、赛果，并结合关键球员生成AI预测。",
         tags: ["实时赛程", "AI预测", "关键球员"]
       },
       matches: focusMatches,
