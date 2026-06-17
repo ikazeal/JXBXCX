@@ -1183,8 +1183,12 @@ async function handleApi(req, res, pathname, query) {
     const userId = body.userId || req.headers["x-gbc-user-id"] || "demo-user";
     const user = (db.users || []).find((item) => item.userId === userId);
     const existingIndex = db.predictions.findIndex((item) => item.userId === userId && item.matchId === body.matchId);
+    if (existingIndex >= 0) {
+      sendJson(res, { error: "本场已提交，不能修改", prediction: settlePrediction(db, db.predictions[existingIndex]) }, 409);
+      return;
+    }
     const prediction = {
-      id: existingIndex >= 0 ? db.predictions[existingIndex].id : `p_${Date.now()}`,
+      id: `p_${Date.now()}`,
       userId,
       nickname: body.nickname || getUserDisplayName(user),
       matchId: body.matchId,
@@ -1192,8 +1196,7 @@ async function handleApi(req, res, pathname, query) {
       score: parseScore(body.score).normalized,
       createdAt: new Date().toISOString()
     };
-    if (existingIndex >= 0) db.predictions[existingIndex] = prediction;
-    else db.predictions.push(prediction);
+    db.predictions.push(prediction);
     writeDb(db);
     sendJson(res, { prediction: settlePrediction(db, prediction) });
     return;
