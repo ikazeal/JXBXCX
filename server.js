@@ -11,6 +11,15 @@ const BAIDU_WORLD_CUP_URL = "https://tiyu.baidu.com/al/match?match=%E4%B8%96%E7%
 const CCTV_WORLD_CUP_URL = "https://worldcup.cctv.com/2026/schedule/index.shtml";
 const GOLDEN_BOOT_SCHEDULE_URL = "https://www.goldenbootflap.xyz/schedule";
 const GOLDEN_BOOT_SCHEDULE_API = "https://www.goldenbootflap.xyz/api/baidu-schedule";
+const GOLDEN_BOOT_PLAYER_IMAGE_BASE = "https://www.goldenbootflap.xyz/players/";
+
+function normalizePlayerImageUrl(image) {
+  const value = String(image || "").trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  const filename = value.split("/").filter(Boolean).pop();
+  return filename ? `${GOLDEN_BOOT_PLAYER_IMAGE_BASE}${filename}` : "";
+}
 
 function readDb() {
   return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
@@ -318,6 +327,7 @@ function enrichMatch(db, match) {
   const prediction = buildAiPrediction(db, match, homeTeam, awayTeam, dedupedPlayers);
   const keyPlayers = dedupedPlayers.map((player) => ({
     ...player,
+    image: normalizePlayerImageUrl(player.image),
     team: getTeam(db, player.teamId),
     predictionText: buildPlayerAiIntro(db, player, match)
   }));
@@ -1261,7 +1271,7 @@ async function handleApi(req, res, pathname, query) {
   }
 
   if (req.method === "GET" && pathname === "/api/players") {
-    sendJson(res, { players: db.players.map((item) => ({ ...item, team: getTeam(db, item.teamId) })) });
+    sendJson(res, { players: db.players.map((item) => ({ ...item, image: normalizePlayerImageUrl(item.image), team: getTeam(db, item.teamId) })) });
     return;
   }
 
@@ -1283,7 +1293,7 @@ async function handleApi(req, res, pathname, query) {
       .slice()
       .sort((a, b) => Number(b.impact || 0) - Number(a.impact || 0))
       .slice(0, 8)
-      .map((player) => ({ ...player, team: getTeam(db, player.teamId) }));
+      .map((player) => ({ ...player, image: normalizePlayerImageUrl(player.image), team: getTeam(db, player.teamId) }));
     const championRankings = buildChampionRankings(db);
     const teamPowerRankings = buildTeamRankings(db).slice(0, 12);
     sendJson(res, {
